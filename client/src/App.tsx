@@ -1,5 +1,16 @@
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from 'react-leaflet';
 import { useState } from 'react';
+import L from 'leaflet';
+
+// Fix default marker icon in bundler (Vite/Webpack)
+const defaultIcon = L.icon({
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+L.Marker.prototype.options.icon = defaultIcon;
 
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
 const DEFAULT_ZOOM = 10;
@@ -95,6 +106,15 @@ export default function App() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <MapClickHandler onLocationSelect={handleLocationSelect} />
+            {safeWater?.map((p) => (
+              <Marker key={p.id} position={[p.lat, p.lng]}>
+                <Popup>
+                  <span className="font-medium">{p.name}</span>
+                  <br />
+                  <span className="text-gray-500">{p.distanceKm} km away</span>
+                </Popup>
+              </Marker>
+            ))}
           </MapContainer>
         </div>
         <aside className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col gap-4 overflow-auto">
