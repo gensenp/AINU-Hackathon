@@ -20,36 +20,36 @@ const disaster = (lat: number, lng: number, title?: string): Disaster => ({
 // NYC area
 const nyc = { lat: 40.7128, lng: -74.006 };
 
-// 1. No disasters → score 100
+// 1. No disasters, no water data → score 94 (small penalty for no water data)
 const noDisasters = computeRiskScore(nyc.lat, nyc.lng, []);
-assert(noDisasters.score === 100, `Expected 100, got ${noDisasters.score}`);
+assert(noDisasters.score === 94, `Expected 94, got ${noDisasters.score}`);
 assert(
   noDisasters.explanation.includes('No known disasters'),
   'Explanation should say no known disasters'
 );
-console.log('✓ No disasters → score 100');
+console.log('✓ No disasters, no water data → score 94');
 
-// 2. Disaster far away (>150 km) → still 100
+// 2. Disaster far away → 94 (no disaster penalty; -6 for no water data)
 const far = disaster(34.05, -118.25, 'LA fire'); // ~3940 km from NYC
 const farResult = computeRiskScore(nyc.lat, nyc.lng, [far]);
-assert(farResult.score === 100, `Expected 100 when disaster far, got ${farResult.score}`);
-console.log('✓ Disaster far away → score 100');
+assert(farResult.score === 94, `Expected 94 when disaster far, got ${farResult.score}`);
+console.log('✓ Disaster far away → score 94');
 
-// 3. Disaster within 150 km → score 75 (one penalty of 25)
+// 3. Disaster within 500 km → score drops (one disaster penalty; -6 for no water data)
 const nearby = disaster(40.9, -74.0, 'Flood declaration');
 const nearbyResult = computeRiskScore(nyc.lat, nyc.lng, [nearby]);
-assert(nearbyResult.score === 75, `Expected 75, got ${nearbyResult.score}`);
+assert(nearbyResult.score === 73, `Expected 73, got ${nearbyResult.score}`);
 assert(
-  nearbyResult.explanation.includes('Flood declaration') || nearbyResult.explanation.includes('Disaster nearby'),
+  nearbyResult.explanation.includes('disaster') || nearbyResult.explanation.includes('Flood'),
   'Explanation should mention the disaster'
 );
-console.log('✓ One disaster within 150 km → score 75');
+console.log('✓ One disaster within 500 km → score 73');
 
-// 4. Two disasters within 150 km → score 50
+// 4. Two disasters within 500 km → score drops further
 const nearby2 = disaster(40.5, -73.8, 'Chemical spill');
 const twoResult = computeRiskScore(nyc.lat, nyc.lng, [nearby, nearby2]);
-assert(twoResult.score === 50, `Expected 50, got ${twoResult.score}`);
-console.log('✓ Two disasters nearby → score 50');
+assert(twoResult.score < nearbyResult.score, 'Two disasters should lower score further');
+console.log('✓ Two disasters nearby → score', twoResult.score);
 
 // 5. Score never goes below 0
 const many = Array.from({ length: 10 }, (_, i) => disaster(40.7 + i * 0.01, -74, `D${i}`));

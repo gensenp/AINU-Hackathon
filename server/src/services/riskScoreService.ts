@@ -73,6 +73,8 @@ export function computeRiskScore(
 
   if (nearbyDisasterCount > 0) {
     reasons.push(`${nearbyDisasterCount} disaster declaration(s) within ${DISASTER_RADIUS_KM} km`);
+  } else {
+    reasons.push(`No known disasters within ${DISASTER_RADIUS_KM} km`);
   }
 
   // 2) Water source quality risk (uses nearest few points)
@@ -84,43 +86,63 @@ export function computeRiskScore(
     .sort((a, b) => a.km - b.km)
     .slice(0, 5);
 
+  let waterPenalty = 0;
   if (nearest.length > 0) {
-    let waterPenalty = 0;
-
     for (const p of nearest) {
       const base = waterBasePenalty(p.type, p.potableHint);
-
-      // Nearby points matter more; far points still count a little
-      const distanceFactor = Math.max(0.2, 1 - p.km / 30); // 0.2..1
+      const distanceFactor = Math.max(0.2, 1 - p.km / 30);
       waterPenalty += base * distanceFactor;
     }
-
-    // Average + scale, then cap
     waterPenalty = Math.min((waterPenalty / nearest.length) * 1.8, 35);
     score -= waterPenalty;
 
-    const riskyTypes = nearest.filter(
+    // Data-driven summary: count by type (treat potable=yes as safest)
+    const drinking = nearest.filter((p) => p.type === 'drinking_water' || p.potableHint === 'yes').length;
+    const fountain = nearest.filter((p) => p.type === 'fountain').length;
+    const wellOrSpring = nearest.filter((p) => p.type === 'well' || p.type === 'spring').length;
+    const untreated = nearest.filter(
       (p) =>
         p.potableHint !== 'yes' &&
         (p.type === 'river' || p.type === 'reservoir' || p.type === 'fountain')
     ).length;
+    const unknownType = nearest.filter((p) => !p.type || p.type === 'river').length;
 
-    if (riskyTypes > 0) {
-      reasons.push('nearest water options are mostly untreated/uncertain sources');
+    const parts: string[] = [];
+    if (drinking > 0) parts.push(`${drinking} designated drinking water`);
+    if (fountain > 0) parts.push(`${fountain} ${fountain === 1 ? 'fountain' : 'fountains'}`);
+    if (wellOrSpring > 0) parts.push(`${wellOrSpring} well/spring`);
+    if (untreated > 0 || (unknownType > 0 && drinking === 0)) {
+      const n = untreated || unknownType;
+      parts.push(`${n} untreated or uncertain`);
+    }
+    const waterSummary =
+      parts.length > 0
+        ? `Nearby sources (nearest 5): ${parts.join(', ')}.`
+        : 'Nearby water sources present; types vary.';
+
+    // Only say "mostly untreated/uncertain" when a majority are risky and the score is actually reduced by water
+    const majorityRisky =
+      untreated >= Math.ceil(nearest.length / 2) ||
+      (drinking === 0 && fountain + wellOrSpring >= nearest.length);
+    const waterPenaltySignificant = waterPenalty >= 10;
+
+    if (majorityRisky && waterPenaltySignificant) {
+      reasons.push(`Nearest water options are mostly untreated or uncertain. ${waterSummary}`);
+    } else if (drinking >= 1 && waterPenalty < 8) {
+      reasons.push(`${waterSummary} Overall risk from water is low.`);
     } else {
-      reasons.push('nearby water options include safer candidates');
+      reasons.push(waterSummary);
     }
   } else {
-    // No local water-source data -> slight uncertainty penalty
     score -= 6;
-    reasons.push('limited nearby water-source data');
+    reasons.push('Limited nearby water-source data; consider checking local maps or authorities.');
   }
 
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   const explanation =
     reasons.length > 0
-      ? reasons.join('. ')
+      ? reasons.join(' ')
       : 'No major nearby disaster or water quality concerns detected.';
 
   return { score, explanation };
