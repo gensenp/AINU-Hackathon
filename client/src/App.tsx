@@ -12,6 +12,14 @@ const defaultIcon = L.icon({
 });
 L.Marker.prototype.options.icon = defaultIcon;
 
+// Red marker for disaster (FEMA) pins
+const redIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
 const DEFAULT_ZOOM = 10;
 
@@ -141,7 +149,11 @@ export default function App() {
             />
 
             {femaItems.map((d, i) => (
-              <Marker key={`${d.id}-${d.state}-${d.declarationDate ?? d.date ?? i}`} position={[d.lat, d.lng]}>
+              <Marker
+                key={`${d.id}-${d.state}-${d.declarationDate ?? d.date ?? i}`}
+                position={[d.lat, d.lng]}
+                icon={redIcon}
+              >
                 <Popup>
                   <strong>{d.title}</strong>
                   <br />
@@ -153,6 +165,12 @@ export default function App() {
             ))}
 
             <MapClickHandler onLocationSelect={handleLocationSelect} />
+
+            {lastClicked && (
+              <Marker position={[lastClicked.lat, lastClicked.lng]} zIndexOffset={1000}>
+                <Popup>You are here / Selected location</Popup>
+              </Marker>
+            )}
 
             {safeWater?.map((p) => (
               <Marker key={p.id} position={[p.lat, p.lng]}>
