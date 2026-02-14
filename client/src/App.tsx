@@ -2,7 +2,7 @@ import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from 'react-leaf
 import { useState, useEffect } from 'react';
 import L from 'leaflet';
 
-// Fix default marker icon in bundler (Vite/Webpack)
+// Blue = default (water). Red = disasters (FEMA).
 const defaultIcon = L.icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -10,24 +10,27 @@ const defaultIcon = L.icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
-L.Marker.prototype.options.icon = defaultIcon;
-
-// Red marker for disaster (FEMA) pins
 const redIcon = L.icon({
   iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
+L.Marker.prototype.options.icon = defaultIcon;
 
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
 const DEFAULT_ZOOM = 10;
+
+function directionsUrl(lat: number, lng: number): string {
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
 
 type SafeWaterPoint = {
   id: string;
   lat: number;
   lng: number;
   name: string;
+  category?: 'fountain' | 'tap' | 'refill' | 'other';
   distanceKm: number;
   type?: string;
 };
@@ -78,6 +81,7 @@ export default function App() {
   const [safeWaterError, setSafeWaterError] = useState<string | null>(null);
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const [femaItems, setFemaItems] = useState<FemaItem[]>([]);
+  const [reportSent, setReportSent] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/health')
@@ -144,18 +148,45 @@ export default function App() {
     if (lastClicked) fetchNearbySafeWater(lastClicked.lat, lastClicked.lng);
   };
 
+  const handleReportProblem = async (p: SafeWaterPoint) => {
+    const description = `Problem at water source: ${p.name} (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`;
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description, lat: p.lat, lng: p.lng }),
+      });
+      if (res.ok) {
+        setReportSent(p.id);
+        setTimeout(() => setReportSent(null), 3000);
+      }
+    } catch {
+      setReportSent(null);
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col">
       <header className="bg-slate-800 text-white px-4 py-3 shadow flex items-center gap-4">
         <img src="/aquasafe-logo.png" alt="" className="h-14 w-14 object-contain shrink-0" />
-        <div>
+        <div className="min-w-0">
           <h1 className="text-xl font-bold">AquaSafe</h1>
-          <p className="text-sm text-slate-300">Find safe water - click the map for risk score</p>
+          <p className="text-sm text-slate-300">Find safe water near you. Click the map for risk score, then get directions to the nearest source.</p>
         </div>
       </header>
 
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 p-2">
         <div className="md:col-span-2 relative rounded-lg overflow-hidden border border-gray-200">
+          {/* Map legend */}
+          <div className="absolute bottom-4 left-4 z-[1000] bg-white/95 backdrop-blur rounded-lg shadow border border-gray-200 px-3 py-2 text-xs text-gray-700 flex flex-col gap-1">
+            <span className="font-semibold text-gray-800">Legend</span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-4 bg-blue-500 rounded-sm" /> Water source
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-4 bg-red-500 rounded-sm" /> Disaster (FEMA)
+            </span>
+          </div>
           <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" scrollWheelZoom>
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -190,10 +221,31 @@ export default function App() {
               <Marker key={p.id} position={[p.lat, p.lng]}>
                 <Popup>
                   <span className="font-medium">{p.name}</span>
+                  {p.category && p.category !== 'other' && (
+                    <>
+                      <br />
+                      <span className="text-gray-500 capitalize">{p.category}</span>
+                    </>
+                  )}
                   <br />
-                  <span className="text-gray-500">
-                    {waterTypeLabel(p.type)} · {p.distanceKm} km away
-                  </span>
+                  <span className="text-gray-500">{p.distanceKm} km away</span>
+                  <br />
+                  <a
+                    href={directionsUrl(p.lat, p.lng)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 text-sm hover:underline"
+                  >
+                    Get directions →
+                  </a>
+                  <br />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); handleReportProblem(p); }}
+                    className="text-amber-600 text-sm hover:underline mt-0.5"
+                  >
+                    Report problem
+                  </button>
                 </Popup>
               </Marker>
             ))}
@@ -234,13 +286,35 @@ export default function App() {
           {safeWater && safeWater.length > 0 && (
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Nearest safe water</h3>
+              <p className="text-xs text-gray-500 mb-2">
+                Mapped public water points. In a disaster, prefer official distribution points when available.
+              </p>
               <ul className="space-y-2">
                 {safeWater.map((p) => (
                   <li key={p.id} className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">
                     <span className="font-medium">{p.name}</span>
-                    <span className="block text-gray-500">
-                      {waterTypeLabel(p.type)} · {p.distanceKm} km away
-                    </span>
+                    {p.category && p.category !== 'other' && (
+                      <span className="ml-1.5 text-gray-500 text-xs capitalize">({p.category})</span>
+                    )}
+                    <span className="block text-gray-500">{p.distanceKm} km away</span>
+                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1">
+                      <a
+                        href={directionsUrl(p.lat, p.lng)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 text-xs hover:underline"
+                      >
+                        Directions
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => handleReportProblem(p)}
+                        className="text-amber-600 text-xs hover:underline"
+                      >
+                        Report problem
+                      </button>
+                      {reportSent === p.id && <span className="text-emerald-600 text-xs">Sent</span>}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -267,6 +341,10 @@ export default function App() {
           {!loading && !risk && (
             <p className="text-gray-500">Click a point on the map to see water safety risk.</p>
           )}
+
+          <p className="text-xs text-gray-400 mt-2">
+            Data: OpenStreetMap (water), FEMA (disasters). Not a substitute for official advisories.
+          </p>
         </aside>
       </div>
     </div>
