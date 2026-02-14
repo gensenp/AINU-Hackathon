@@ -19,7 +19,10 @@ const STATE_COORDS: Record<string, { lat: number; lng: number }> = {
 export async function getFemaDisasters(limit = 50) {
   const api = `https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries?$top=${limit}&$orderby=declarationDate desc`;
   const res = await fetch(api);
-  if (!res.ok) throw new Error(`FEMA fetch failed: ${res.status}`);
+
+  if (!res.ok) {
+    throw new Error(`FEMA fetch failed: ${res.status}`);
+  }
 
   const json = await res.json();
   const rows: FemaRecord[] = json.DisasterDeclarationsSummaries ?? [];
@@ -32,12 +35,13 @@ export async function getFemaDisasters(limit = 50) {
 
       return {
         id: r.disasterNumber ?? i,
-        title: r.declarationTitle ?? "Disaster",
-        state: r.state ?? "NA",
+        title: r.declarationTitle ?? 'Disaster',
+        state: r.state ?? 'NA',
         date: r.declarationDate ?? null,
-        type: r.incidentType ?? "Unknown",
+        type: r.incidentType ?? 'Unknown',
         lat: Number.isFinite(lat) ? lat : fallback?.lat,
         lng: Number.isFinite(lng) ? lng : fallback?.lng
       };
     })
-    .filter((d) => d.lat !=
+    .filter((d) => d.lat != null && d.lng != null);
+}
