@@ -75,9 +75,12 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="bg-emerald-800 text-white px-4 py-3 shadow">
-        <h1 className="text-xl font-bold">AquaSafe</h1>
-        <p className="text-sm text-emerald-100">Find safe water — click the map for risk score</p>
+      <header className="bg-emerald-800 text-white px-4 py-3 shadow flex items-center gap-3">
+        <img src="/aquasafe-logo.png" alt="" className="h-9 w-9 object-contain" />
+        <div>
+          <h1 className="text-xl font-bold">AquaSafe</h1>
+          <p className="text-sm text-emerald-100">Find safe water — click the map for risk score</p>
+        </div>
       </header>
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 p-2">
         <div className="md:col-span-2 relative rounded-lg overflow-hidden border border-gray-200">
