@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { fetchNearbyWaterSources } from '../services/waterSources.js';
 
 export const waterRouter = Router();
 
@@ -26,7 +27,7 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 // GET /api/water/nearby?lat=40.7&lng=-74&limit=5
-waterRouter.get('/nearby', (req: Request, res: Response) => {
+waterRouter.get('/nearby', async (req: Request, res: Response) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
@@ -35,10 +36,14 @@ waterRouter.get('/nearby', (req: Request, res: Response) => {
     return res.status(400).json({ error: 'lat and lng are required' });
   }
 
-  const withDistance = SAFE_WATER_POINTS.map((point) => ({
-    ...point,
-    distanceKm: Math.round(haversineKm(lat, lng, point.lat, point.lng) * 100) / 100,
-  }));
+const livePoints = await fetchNearbyWaterSources(lat, lng, limit);
+const sourcePoints = livePoints.length > 0 ? livePoints : SAFE_WATER_POINTS;
+
+const withDistance = sourcePoints.map((point) => ({
+  ...point,
+  distanceKm: Math.round(haversineKm(lat, lng, point.lat, point.lng) * 100) / 100,
+}));
+
 
   withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
 
