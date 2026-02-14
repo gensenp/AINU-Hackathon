@@ -79,6 +79,29 @@ if (impl === 'sqlite') {
         urgency TEXT NOT NULL DEFAULT 'medium',
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS wqp_cache (
+        lat_key REAL NOT NULL,
+        lng_key REAL NOT NULL,
+        within_miles INTEGER NOT NULL,
+        station_count INTEGER NOT NULL,
+        result_count INTEGER NOT NULL,
+        result_summary_json TEXT,
+        fetched_at TEXT NOT NULL,
+        PRIMARY KEY (lat_key, lng_key, within_miles)
+      );
+      CREATE TABLE IF NOT EXISTS water_quality_weights (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        weights_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS water_quality_training (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        features_json TEXT NOT NULL,
+        score REAL NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
   } catch (err) {
     console.warn('Failed to open SQLite; using in-memory store:', (err as Error).message);
@@ -118,4 +141,85 @@ export function getRecentReports(limit: number = 50): ReportRow[] {
     LIMIT ?
   `);
   return stmt.all(limit) as ReportRow[];
+}
+
+// --- WQP cache (SQLite only) ---
+const WQP_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export type WqpCacheRow = {
+  station_count: number;
+  result_count: number;
+  result_summary_json: string | null;
+  fetched_at: string;
+};
+
+export function getWqpCache(lat: number, lng: number, withinMiles: number): WqpCacheRow | null {
+  if (impl !== 'sqlite') return null;
+  const latKey = Math.round(lat * 100) / 100;
+  const lngKey = Math.round(lng * 100) / 100;
+  const row = getDb().prepare(`
+    SELECT station_count, result_count, result_summary_json, fetched_at
+    FROM wqp_cache WHERE lat_key = ? AND lng_key = ? AND within_miles = ?
+  `).get(latKey, lngKey, withinMiles) as (WqpCacheRow & { fetched_at: string }) | undefined;
+  if (!row) return null;
+  const age = Date.now() - new Date(row.fetched_at).getTime();
+  if (age > WQP_CACHE_TTL_MS) return null;
+  return row;
+}
+
+export function setWqpCache(
+  lat: number,
+  lng: number,
+  withinMiles: number,
+  stationCount: number,
+  resultCount: number,
+  resultSummaryJson: string | null
+): void {
+  if (impl !== 'sqlite') return;
+  const latKey = Math.round(lat * 100) / 100;
+  const lngKey = Math.round(lng * 100) / 100;
+  getDb().prepare(`
+    INSERT OR REPLACE INTO wqp_cache (lat_key, lng_key, within_miles, station_count, result_count, result_summary_json, fetched_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+  `).run(latKey, lngKey, withinMiles, stationCount, resultCount, resultSummaryJson);
+}
+
+// --- ML model weights (SQLite only) ---
+export function getWaterQualityWeights(): number[] | null {
+  if (impl !== 'sqlite') return null;
+  const row = getDb().prepare('SELECT weights_json FROM water_quality_weights WHERE id = 1').get() as { weights_json: string } | undefined;
+  if (!row) return null;
+  try {
+    return JSON.parse(row.weights_json) as number[];
+  } catch {
+    return null;
+  }
+}
+
+export function setWaterQualityWeights(weights: number[]): void {
+  if (impl !== 'sqlite') return;
+  getDb().prepare(`
+    INSERT OR REPLACE INTO water_quality_weights (id, weights_json, created_at) VALUES (1, ?, datetime('now'))
+  `).run(JSON.stringify(weights));
+}
+
+export function insertWaterQualityTraining(lat: number, lng: number, features: number[], score: number): void {
+  if (impl !== 'sqlite') return;
+  getDb().prepare(`
+    INSERT INTO water_quality_training (lat, lng, features_json, score, created_at) VALUES (?, ?, ?, ?, datetime('now'))
+  `).run(lat, lng, JSON.stringify(features), score);
+}
+
+export function getWaterQualityTrainingSamples(limit: number = 1000): { features: number[]; score: number }[] {
+  if (impl !== 'sqlite') return [];
+  const rows = getDb().prepare(`
+    SELECT features_json, score FROM water_quality_training ORDER BY id DESC LIMIT ?
+  `).all(limit) as { features_json: string; score: number }[];
+  return rows.map((r) => {
+    try {
+      return { features: JSON.parse(r.features_json) as number[], score: r.score };
+    } catch {
+      return { features: [], score: r.score };
+    }
+  }).filter((s) => s.features.length > 0);
 }
