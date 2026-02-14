@@ -1,16 +1,13 @@
-export type WaterSource = {
-  id: string;
-  lat: number;
-  lng: number;
-  name: string;
-};
+export type WaterSource = { id: string; lat: number; lng: number; name: string };
 
 export async function fetchNearbyWaterSources(lat: number, lng: number, limit = 20): Promise<WaterSource[]> {
   const query = `
     [out:json][timeout:25];
     (
-      node(around:15000,${lat},${lng})["amenity"="drinking_water"];
-      node(around:15000,${lat},${lng})["man_made"="water_well"];
+      node(around:25000,${lat},${lng})["amenity"="drinking_water"];
+      node(around:25000,${lat},${lng})["amenity"="water_point"];
+      node(around:25000,${lat},${lng})["amenity"="fountain"];
+      node(around:25000,${lat},${lng})["man_made"="water_well"];
     );
     out body;
   `;
@@ -20,7 +17,6 @@ export async function fetchNearbyWaterSources(lat: number, lng: number, limit = 
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `data=${encodeURIComponent(query)}`
   });
-
   if (!res.ok) return [];
 
   const json = await res.json();
@@ -30,6 +26,6 @@ export async function fetchNearbyWaterSources(lat: number, lng: number, limit = 
     id: String(e.id),
     lat: e.lat,
     lng: e.lon,
-    name: e.tags?.name || 'Public Drinking Water'
+    name: e.tags?.name || 'Public Water Source'
   }));
 }
