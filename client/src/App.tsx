@@ -1,4 +1,4 @@
-import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, useMapEvents, Marker, Popup, Circle } from 'react-leaflet';
 import { useState, useEffect } from 'react';
 import L from 'leaflet';
 
@@ -72,8 +72,13 @@ function MapClickHandler({
   return null;
 }
 
+type NearbyDisaster = { id: string; title?: string; state?: string; type?: string; count?: number };
 export default function App() {
-  const [risk, setRisk] = useState<{ score: number; explanation: string } | null>(null);
+  const [risk, setRisk] = useState<{
+    score: number;
+    explanation: string;
+    nearbyDisasters: NearbyDisaster[];
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastClicked, setLastClicked] = useState<{ lat: number; lng: number } | null>(null);
   const [safeWater, setSafeWater] = useState<SafeWaterPoint[] | null>(null);
@@ -92,7 +97,7 @@ export default function App() {
 
   useEffect(() => {
     const load = () =>
-      fetch('/api/fema?limit=50')
+      fetch('/api/fema?limit=250')
         .then((r) => r.json())
         .then((data: FemaItem[]) => setFemaItems(data))
         .catch(() => setFemaItems([]));
@@ -111,7 +116,11 @@ export default function App() {
     try {
       const res = await fetch(`/api/risk?lat=${lat}&lng=${lng}`);
       const data = await res.json();
-      if (res.ok) setRisk({ score: data.score, explanation: data.explanation });
+      if (res.ok) setRisk({
+        score: data.score,
+        explanation: data.explanation,
+        nearbyDisasters: data.nearbyDisasters ?? [],
+      });
     } finally {
       setLoading(false);
     }
@@ -186,6 +195,9 @@ export default function App() {
             <span className="flex items-center gap-2">
               <span className="inline-block w-3 h-4 bg-red-500 rounded-sm" /> Disaster (FEMA)
             </span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-red-500 bg-red-500/10" /> 50 km approximate radius
+            </span>
           </div>
           <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full" scrollWheelZoom>
             <TileLayer
@@ -193,6 +205,19 @@ export default function App() {
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
 
+            {femaItems.map((d, i) => (
+              <Circle
+                key={`circle-${d.id}-${d.state}-${d.declarationDate ?? d.date ?? i}`}
+                center={[d.lat, d.lng]}
+                radius={50000}
+                pathOptions={{
+                  color: '#dc2626',
+                  fillColor: '#dc2626',
+                  fillOpacity: 0.08,
+                  weight: 1.5,
+                }}
+              />
+            ))}
             {femaItems.map((d, i) => (
               <Marker
                 key={`${d.id}-${d.state}-${d.declarationDate ?? d.date ?? i}`}
@@ -205,6 +230,8 @@ export default function App() {
                   {(d.type ?? 'Disaster')} | {d.state}
                   <br />
                   {d.declarationDate ?? d.date ?? 'No date'}
+                  <br />
+                  <span className="text-gray-500 text-xs">50 km approximate radius; FEMA designates by county.</span>
                 </Popup>
               </Marker>
             ))}
@@ -283,11 +310,53 @@ export default function App() {
 
           {safeWaterError && <p className="text-sm text-red-600">{safeWaterError}</p>}
 
-          {safeWater && safeWater.length > 0 && (
+          {risk?.nearbyDisasters && risk.nearbyDisasters.length > 0 ? (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm">
+              <h4 className="font-semibold text-red-900 mb-1">Disasters affecting this location</h4>
+              <p className="text-red-800 text-xs mb-2">
+                {risk.nearbyDisasters.reduce((s, d) => s + (d.count ?? 1), 0)} disaster declaration{risk.nearbyDisasters.reduce((s, d) => s + (d.count ?? 1), 0) !== 1 ? 's' : ''} within 50 km.
+                Disasters can affect water supply and quality. Check local and FEMA advisories before using local water.
+              </p>
+              <ul className="list-disc list-inside text-red-800 text-xs space-y-0.5">
+                {risk.nearbyDisasters.map((d, i) => (
+                  <li key={d.id ?? i}>
+                    {d.title ?? 'Disaster declaration'}
+                    {d.state && ` (${d.state})`}
+                    {d.type && ` — ${d.type}`}
+                    {(d.count ?? 1) > 1 && ` (${d.count} declarations)`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : risk && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm">
+              <h4 className="font-semibold text-red-900 mb-1">Disasters affecting this location</h4>
+              <p className="text-red-800 text-xs">
+                No disaster declarations within 50 km of the selected point. Check local and FEMA advisories before using local water.
+              </p>
+            </div>
+          )}
+          {!risk && (
+            <p className="text-gray-500 text-xs">Click the map to see disaster declarations affecting that location.</p>
+          )}
+
+          {safeWater && safeWater.length > 0 && (() => {
+            const counts = { fountain: 0, tap: 0, refill: 0, other: 0 };
+            safeWater.forEach((p) => { counts[p.category ?? 'other']++; });
+            const parts: string[] = [];
+            if (counts.fountain) parts.push(`${counts.fountain} fountain${counts.fountain !== 1 ? 's' : ''}`);
+            if (counts.tap) parts.push(`${counts.tap} tap${counts.tap !== 1 ? 's' : ''}`);
+            if (counts.refill) parts.push(`${counts.refill} refill station${counts.refill !== 1 ? 's' : ''}`);
+            if (counts.other) parts.push(`${counts.other} other (type unknown)`);
+            const summary = parts.length ? parts.join(', ') : 'various';
+            return (
             <div>
-              <h3 className="font-semibold text-gray-800 mb-2">Nearest safe water</h3>
+              <h3 className="font-semibold text-gray-800 mb-2">Nearby safe water</h3>
+              <p className="text-xs text-gray-600 mb-2">
+                <strong>{safeWater.length} nearby:</strong> {summary}. Water quality at these locations is not verified—treat as uncertain unless officially designated.
+              </p>
               <p className="text-xs text-gray-500 mb-2">
-                Mapped public water points. In a disaster, prefer official distribution points when available.
+                In a disaster, prefer official distribution points when available.
               </p>
               <ul className="space-y-2">
                 {safeWater.map((p) => (
@@ -319,7 +388,8 @@ export default function App() {
                 ))}
               </ul>
             </div>
-          )}
+            );
+          })()}
 
           {safeWater && safeWater.length === 0 && !safeWaterError && (
             <p className="text-sm text-gray-500">No safe water points found nearby.</p>
@@ -343,7 +413,7 @@ export default function App() {
           )}
 
           <p className="text-xs text-gray-400 mt-2">
-            Data: OpenStreetMap (water), FEMA (disasters). Not a substitute for official advisories.
+            Data: OpenStreetMap (water), FEMA (disasters). Disaster radius is approximate; FEMA designates affected areas by county. See FEMA.gov for official boundaries. Not a substitute for official advisories.
           </p>
         </aside>
       </div>

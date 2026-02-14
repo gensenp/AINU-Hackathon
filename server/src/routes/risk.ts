@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { getDisasters } from '../services/disasters.js';
 import { getAiExplanation } from '../services/aiExplanation.js';
 import { computeRiskScore } from '../services/riskScoreService.js';
-import { fetchNearbyWaterSources } from '../services/waterSources.js';
 
 export const riskRouter = Router();
 
@@ -16,24 +15,15 @@ riskRouter.get('/', async (req, res) => {
   }
 
   const disasters = await getDisasters();
-
-  let nearbyWater = [];
-  try {
-    nearbyWater = await fetchNearbyWaterSources(lat, lng, 8);
-  } catch {
-    nearbyWater = [];
-  }
-
-  const { score, explanation: heuristicExplanation } = computeRiskScore(
+  const { score, explanation: heuristicExplanation, nearbyDisasters } = computeRiskScore(
     lat,
     lng,
-    disasters,
-    nearbyWater
+    disasters
   );
 
   let explanation = heuristicExplanation;
   const aiSentence = await getAiExplanation(score, heuristicExplanation, lat, lng);
   if (aiSentence) explanation = aiSentence;
 
-  res.json({ score, explanation, lat, lng });
+  res.json({ score, explanation, nearbyDisasters, lat, lng });
 });
