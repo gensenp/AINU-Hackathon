@@ -4,15 +4,15 @@ import cors from 'cors';
 import { riskRouter } from './routes/risk.js';
 import { reportsRouter } from './routes/reports.js';
 import { femaRouter } from './routes/fema.js';
-
+import { waterRouter } from './routes/water.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
 
 app.use(cors());
 app.use(express.json());
-app.use("/api/fema", femaRouter);
-
+app.use('/api/fema', femaRouter);
+app.use('/api/water', waterRouter);
 
 // API routes
 app.use('/api/risk', riskRouter);

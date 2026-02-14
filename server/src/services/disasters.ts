@@ -1,7 +1,9 @@
 /**
- * Fetches disasters for risk scoring. Once Step 1 (Data) adds GET /api/disasters,
- * this will use that endpoint. Until then it returns [] so the heuristic still runs.
+ * Fetches disasters for risk scoring. Uses FEMA service directly so risk score
+ * is based on real disaster declarations (with approximate state-level coordinates).
  */
+import { getFemaDisasters } from './fema.js';
+
 export type Disaster = {
   id: string;
   title?: string;
@@ -12,16 +14,17 @@ export type Disaster = {
   riskScore?: number;
 };
 
-const PORT = process.env.PORT ?? 5000;
-const BASE = `http://127.0.0.1:${PORT}`;
-
 export async function getDisasters(): Promise<Disaster[]> {
   try {
-    const res = await fetch(`${BASE}/api/disasters`);
-    if (!res.ok) return [];
-    const data = await res.json();
-    // Support both { disasters: [...] } and plain [...]
-    return Array.isArray(data) ? data : data.disasters ?? [];
+    const items = await getFemaDisasters(100);
+    return items.map((d) => ({
+      id: d.id,
+      title: d.title,
+      state: d.state,
+      lat: d.lat,
+      lng: d.lng,
+      type: d.type,
+    }));
   } catch {
     return [];
   }
