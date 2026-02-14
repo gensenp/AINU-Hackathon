@@ -39,24 +39,23 @@ See **[STACK.md](./STACK.md)** for stack and data sources, and **[WALKTHROUGH.md
 
 3. **Install and run** — From the repo root:
    ```bash
-   # Terminal 1 — backend
-   cd server && npm install && npm run dev
-
-   # Terminal 2 — frontend
-   cd client && npm install && npm run dev
+   npm run install:all    # installs deps for root, server, and client (first time only)
+   npm run dev           # starts server (5000) + client (5173) in one terminal
    ```
+   **Or** use two terminals: `cd server && npm install && npm run dev` and `cd client && npm install && npm run dev`.
 
-4. **Verify** — Open http://localhost:5173 and click the map; you should see a risk score. API: http://localhost:5000/api/health.
+4. **Verify** — Open **http://localhost:5173** in your browser and click the map; you should see a risk score. API: http://localhost:5000/api/health.
+
+   **If you see "address already in use :::5000"** — something else is using port 5000. Either close that other terminal/app, or run the server on another port: `PORT=5001 npm run dev:server` (then the client’s proxy in `client/vite.config.ts` may need to point to 5001).
 
 ---
 
 ## Quick start (reference)
 
 ```bash
-cp .env.example .env   # add EPA_API_KEY, optional OPENAI_API_KEY
-cd server && npm install && npm run dev
-# In another terminal:
-cd client && npm install && npm run dev
+cp .env.example .env
+npm run install:all    # first time: installs root, server, client deps
+npm run dev            # starts server + client
 ```
 
 - **API:** http://localhost:5000  
