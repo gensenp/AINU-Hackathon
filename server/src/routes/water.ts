@@ -1,18 +1,18 @@
 import { Router, Request, Response } from 'express';
-import { getNearbyWaterFromOSM } from '../services/nearbyWater.js';
+import { fetchNearbyWaterSources } from '../services/waterSources.js';
 
 export const waterRouter = Router();
 
-// Fallback when Overpass API is unavailable or errors (e.g. offline, rate limit)
-const FALLBACK_POINTS: { id: string; lat: number; lng: number; name: string }[] = [
-  { id: 'fallback-1', lat: 40.7589, lng: -73.9851, name: 'Midtown (demo)' },
-  { id: 'fallback-2', lat: 40.7282, lng: -73.7942, name: 'Queens (demo)' },
-  { id: 'fallback-3', lat: 40.6782, lng: -73.9442, name: 'Brooklyn (demo)' },
-  { id: 'fallback-4', lat: 40.8266, lng: -73.9217, name: 'Bronx (demo)' },
-  { id: 'fallback-5', lat: 40.5795, lng: -74.1502, name: 'Staten Island (demo)' },
-  { id: 'fallback-6', lat: 40.7484, lng: -73.9857, name: 'Empire State (demo)' },
-  { id: 'fallback-7', lat: 40.7614, lng: -73.9776, name: 'Central Park East (demo)' },
-  { id: 'fallback-8', lat: 40.6892, lng: -74.0445, name: 'Brooklyn Bridge (demo)' },
+// Demo fallback points (used only if live lookup returns nothing)
+const SAFE_WATER_POINTS: { id: string; lat: number; lng: number; name: string }[] = [
+  { id: '1', lat: 40.7589, lng: -73.9851, name: 'Midtown Fill Station' },
+  { id: '2', lat: 40.7282, lng: -73.7942, name: 'Queens Water Hub' },
+  { id: '3', lat: 40.6782, lng: -73.9442, name: 'Brooklyn Safe Water' },
+  { id: '4', lat: 40.8266, lng: -73.9217, name: 'Bronx Community Source' },
+  { id: '5', lat: 40.5795, lng: -74.1502, name: 'Staten Island Fill Point' },
+  { id: '6', lat: 40.7484, lng: -73.9857, name: 'Empire State Area' },
+  { id: '7', lat: 40.7614, lng: -73.9776, name: 'Central Park East' },
+  { id: '8', lat: 40.6892, lng: -74.0445, name: 'Brooklyn Bridge Area' },
 ];
 
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -37,18 +37,15 @@ waterRouter.get('/nearby', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'lat and lng are required' });
   }
 
-  const pointsFromOSM = await getNearbyWaterFromOSM(lat, lng, limit);
+  const livePoints = await fetchNearbyWaterSources(lat, lng, limit);
+  const sourcePoints = livePoints.length > 0 ? livePoints : SAFE_WATER_POINTS;
 
-  if (pointsFromOSM !== null) {
-    return res.json({ points: pointsFromOSM, source: 'openstreetmap' });
-  }
-
-  // Fallback: demo points when Overpass is down or unreachable
-  const withDistance = FALLBACK_POINTS.map((point) => ({
+  const withDistance = sourcePoints.map((point) => ({
     ...point,
     distanceKm: Math.round(haversineKm(lat, lng, point.lat, point.lng) * 100) / 100,
   }));
   withDistance.sort((a, b) => a.distanceKm - b.distanceKm);
   const points = withDistance.slice(0, limit);
-  res.json({ points, source: 'fallback' });
+
+  res.json({ points, source: livePoints.length > 0 ? 'live' : 'fallback' });
 });
