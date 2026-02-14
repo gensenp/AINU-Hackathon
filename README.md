@@ -40,11 +40,11 @@ See **[STACK.md](./STACK.md)** for stack and data sources, and **[WALKTHROUGH.md
 3. **Install and run** — From the repo root:
    ```bash
    npm run install:all    # installs deps for root, server, and client (first time only)
-   npm run dev           # starts server (5000) + client (5173) in one terminal
+   npm run dev           # starts server (5001) + client (5173) in one terminal
    ```
    **Or** use two terminals: `cd server && npm install && npm run dev` and `cd client && npm install && npm run dev`.
 
-4. **Verify** — Open **http://localhost:5173** in your browser and click the map; you should see a risk score. API: http://localhost:5000/api/health.
+4. **Verify** — Open **http://localhost:5173** in your browser and click the map; you should see a risk score. API: http://localhost:5001/api/health.
 
    **If you see "Network error" or water points / risk score don't load** — Start the **backend** on your machine: from repo root run `npm run dev` (both server + client), or run `cd server && npm run dev` and `cd client && npm run dev` in two terminals. If only the client is running, API requests fail.
 
@@ -60,7 +60,7 @@ npm run install:all    # first time: installs root, server, client deps
 npm run dev            # starts server + client
 ```
 
-- **API:** http://localhost:5000  
+- **API:** http://localhost:5001  
 - **App:** http://localhost:5173 — click the map to get a risk score (MVP stub).
 
 ## MVP checklist

@@ -7,16 +7,14 @@ import { femaRouter } from './routes/fema.js';
 import { waterRouter } from './routes/water.js';
 
 const app = express();
-const PORT = process.env.PORT ?? 5000;
+const PORT = process.env.PORT ?? 5001;
 
 app.use(cors());
 app.use(express.json());
 app.use('/api/fema', femaRouter);
-app.use('/api/water', waterRouter);
-
-// API routes
 app.use('/api/risk', riskRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/water', waterRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'AquaSafe API' });
