@@ -75,11 +75,11 @@ export default function App() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="bg-emerald-800 text-white px-4 py-3 shadow flex items-center gap-3">
-        <img src="/aquasafe-logo.png" alt="" className="h-9 w-9 object-contain" />
+      <header className="bg-slate-800 text-white px-4 py-3 shadow flex items-center gap-4">
+        <img src="/aquasafe-logo.png" alt="" className="h-14 w-14 object-contain shrink-0" />
         <div>
           <h1 className="text-xl font-bold">AquaSafe</h1>
-          <p className="text-sm text-emerald-100">Find safe water — click the map for risk score</p>
+          <p className="text-sm text-slate-300">Find safe water — click the map for risk score</p>
         </div>
       </header>
       <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2 p-2">
@@ -145,7 +145,7 @@ export default function App() {
           {risk && (
             <div>
               <p className="text-2xl font-semibold text-gray-800">
-                Score: <span className="text-emerald-600">{risk.score}</span>/100
+                Score: <span className="text-blue-600">{risk.score}</span>/100
               </p>
               <p className="mt-2 text-sm text-gray-600">{risk.explanation}</p>
             </div>
