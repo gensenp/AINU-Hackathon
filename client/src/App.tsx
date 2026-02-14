@@ -29,7 +29,21 @@ type SafeWaterPoint = {
   lng: number;
   name: string;
   distanceKm: number;
+  type?: string;
 };
+
+function waterTypeLabel(type?: string): string {
+  if (!type) return 'Water source';
+  const labels: Record<string, string> = {
+    drinking_water: 'Drinking water',
+    fountain: 'Fountain',
+    well: 'Well',
+    spring: 'Spring',
+    reservoir: 'Reservoir',
+    river: 'River',
+  };
+  return labels[type] ?? type.replace(/_/g, ' ');
+}
 
 type FemaItem = {
   id: string | number;
@@ -177,7 +191,9 @@ export default function App() {
                 <Popup>
                   <span className="font-medium">{p.name}</span>
                   <br />
-                  <span className="text-gray-500">{p.distanceKm} km away</span>
+                  <span className="text-gray-500">
+                    {waterTypeLabel(p.type)} · {p.distanceKm} km away
+                  </span>
                 </Popup>
               </Marker>
             ))}
@@ -222,7 +238,9 @@ export default function App() {
                 {safeWater.map((p) => (
                   <li key={p.id} className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">
                     <span className="font-medium">{p.name}</span>
-                    <span className="block text-gray-500">{p.distanceKm} km away</span>
+                    <span className="block text-gray-500">
+                      {waterTypeLabel(p.type)} · {p.distanceKm} km away
+                    </span>
                   </li>
                 ))}
               </ul>
