@@ -1,5 +1,5 @@
 import { MapContainer, TileLayer, useMapEvents, Marker, Popup } from 'react-leaflet';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import L from 'leaflet';
 
 // Fix default marker icon in bundler (Vite/Webpack)
@@ -37,6 +37,14 @@ export default function App() {
   const [safeWater, setSafeWater] = useState<SafeWaterPoint[] | null>(null);
   const [loadingSafeWater, setLoadingSafeWater] = useState(false);
   const [safeWaterError, setSafeWaterError] = useState<string | null>(null);
+  const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.ok)
+      .then(setBackendReachable)
+      .catch(() => setBackendReachable(false));
+  }, []);
 
   const handleLocationSelect = async (lat: number, lng: number) => {
     setLastClicked({ lat, lng });
@@ -62,8 +70,8 @@ export default function App() {
       const data = await res.json();
       if (res.ok) setSafeWater(data.points ?? []);
       else setSafeWaterError(data.error ?? 'Failed to load safe water points');
-    } catch {
-      setSafeWaterError('Network error');
+    } catch (e) {
+      setSafeWaterError('Couldn’t reach the API. Make sure the backend is running (e.g. npm run dev from repo root, or cd server && npm run dev).');
     } finally {
       setLoadingSafeWater(false);
     }
@@ -118,6 +126,12 @@ export default function App() {
           </MapContainer>
         </div>
         <aside className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col gap-4 overflow-auto">
+          {backendReachable === false && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm p-3 rounded-lg">
+              <strong>Backend not connected.</strong> In a terminal from the repo folder run: <code className="block mt-1 bg-amber-100 px-2 py-1 rounded text-xs">npm run dev</code>
+              Or run the server alone: <code className="block mt-1 bg-amber-100 px-2 py-1 rounded text-xs">cd server && npm run dev</code>
+            </div>
+          )}
           <div>
             <button
               type="button"
