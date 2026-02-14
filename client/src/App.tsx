@@ -4,6 +4,8 @@ import { useState } from 'react';
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
 const DEFAULT_ZOOM = 10;
 
+type SafeWaterPoint = { id: string; lat: number; lng: number; name: string; distanceKm: number };
+
 function MapClickHandler({
   onLocationSelect,
 }: {
@@ -20,10 +22,17 @@ function MapClickHandler({
 export default function App() {
   const [risk, setRisk] = useState<{ score: number; explanation: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lastClicked, setLastClicked] = useState<{ lat: number; lng: number } | null>(null);
+  const [safeWater, setSafeWater] = useState<SafeWaterPoint[] | null>(null);
+  const [loadingSafeWater, setLoadingSafeWater] = useState(false);
+  const [safeWaterError, setSafeWaterError] = useState<string | null>(null);
 
   const handleLocationSelect = async (lat: number, lng: number) => {
+    setLastClicked({ lat, lng });
     setLoading(true);
     setRisk(null);
+    setSafeWater(null);
+    setSafeWaterError(null);
     try {
       const res = await fetch(`/api/risk?lat=${lat}&lng=${lng}`);
       const data = await res.json();
@@ -31,6 +40,37 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchNearbySafeWater = async (lat: number, lng: number) => {
+    setLoadingSafeWater(true);
+    setSafeWater(null);
+    setSafeWaterError(null);
+    try {
+      const res = await fetch(`/api/water/nearby?lat=${lat}&lng=${lng}&limit=5`);
+      const data = await res.json();
+      if (res.ok) setSafeWater(data.points ?? []);
+      else setSafeWaterError(data.error ?? 'Failed to load safe water points');
+    } catch {
+      setSafeWaterError('Network error');
+    } finally {
+      setLoadingSafeWater(false);
+    }
+  };
+
+  const handleFindSafeWaterNearMe = () => {
+    if (!navigator.geolocation) {
+      setSafeWaterError('Geolocation is not supported by your browser');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => fetchNearbySafeWater(pos.coords.latitude, pos.coords.longitude),
+      () => setSafeWaterError('Could not get your location. Check permissions or try "from this point".')
+    );
+  };
+
+  const handleFindSafeWaterFromPoint = () => {
+    if (lastClicked) fetchNearbySafeWater(lastClicked.lat, lastClicked.lng);
   };
 
   return (
@@ -54,7 +94,50 @@ export default function App() {
             <MapClickHandler onLocationSelect={handleLocationSelect} />
           </MapContainer>
         </div>
-        <aside className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+        <aside className="bg-gray-50 rounded-lg p-4 border border-gray-200 flex flex-col gap-4 overflow-auto">
+          <div>
+            <button
+              type="button"
+              onClick={handleFindSafeWaterNearMe}
+              disabled={loadingSafeWater}
+              className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-lg shadow text-sm"
+            >
+              {loadingSafeWater ? 'Finding…' : 'Find safe water near me'}
+            </button>
+            {lastClicked && (
+              <button
+                type="button"
+                onClick={handleFindSafeWaterFromPoint}
+                disabled={loadingSafeWater}
+                className="w-full mt-2 py-2 px-3 bg-emerald-100 hover:bg-emerald-200 disabled:opacity-50 text-emerald-800 font-medium rounded-lg text-sm"
+              >
+                From clicked point
+              </button>
+            )}
+          </div>
+
+          {safeWaterError && (
+            <p className="text-sm text-red-600">{safeWaterError}</p>
+          )}
+          {safeWater && safeWater.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-gray-800 mb-2">Nearest safe water</h3>
+              <ul className="space-y-2">
+                {safeWater.map((p: SafeWaterPoint) => (
+                  <li key={p.id} className="text-sm text-gray-700 bg-white p-2 rounded border border-gray-200">
+                    <span className="font-medium">{p.name}</span>
+                    <span className="block text-gray-500">{p.distanceKm} km away</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {safeWater && safeWater.length === 0 && !safeWaterError && (
+            <p className="text-sm text-gray-500">No safe water points found nearby.</p>
+          )}
+
+          <hr className="border-gray-200" />
+
           {loading && <p className="text-gray-500">Loading risk score…</p>}
           {risk && (
             <div>

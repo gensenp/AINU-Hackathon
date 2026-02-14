@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { riskRouter } from './routes/risk.js';
 import { reportsRouter } from './routes/reports.js';
+import { waterRouter } from './routes/water.js';
 
 const app = express();
 const PORT = process.env.PORT ?? 5000;
@@ -13,6 +14,7 @@ app.use(express.json());
 // API routes
 app.use('/api/risk', riskRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/water', waterRouter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true, service: 'AquaSafe API' });
