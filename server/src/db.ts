@@ -102,6 +102,13 @@ if (impl === 'sqlite') {
         score REAL NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS safe_water_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        name TEXT NOT NULL DEFAULT 'Safe water (user-reported)',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
   } catch (err) {
     console.warn('Failed to open SQLite; using in-memory store:', (err as Error).message);
@@ -222,4 +229,48 @@ export function getWaterQualityTrainingSamples(limit: number = 1000): { features
       return { features: [], score: r.score };
     }
   }).filter((s) => s.features.length > 0);
+}
+
+// --- User-reported safe water sources (pooled community data) ---
+export interface SafeWaterReportRow {
+  id: number;
+  lat: number;
+  lng: number;
+  name: string;
+  created_at: string;
+}
+
+const safeWaterMemoryStore: SafeWaterReportRow[] = [];
+let safeWaterMemoryId = 1;
+
+export function insertSafeWaterReport(lat: number, lng: number, name: string = 'Safe water (user-reported)'): SafeWaterReportRow {
+  if (impl === 'memory') {
+    const row: SafeWaterReportRow = {
+      id: safeWaterMemoryId++,
+      lat,
+      lng,
+      name: name.trim() || 'Safe water (user-reported)',
+      created_at: new Date().toISOString(),
+    };
+    safeWaterMemoryStore.unshift(row);
+    return row;
+  }
+  const database = getDb();
+  const n = (name ?? '').trim() || 'Safe water (user-reported)';
+  const stmt = database.prepare(`
+    INSERT INTO safe_water_reports (lat, lng, name) VALUES (?, ?, ?)
+  `);
+  const info = stmt.run(lat, lng, n);
+  return database.prepare('SELECT id, lat, lng, name, created_at FROM safe_water_reports WHERE id = ?').get(info.lastInsertRowid) as SafeWaterReportRow;
+}
+
+export function getSafeWaterReports(limit: number = 500): SafeWaterReportRow[] {
+  if (impl === 'memory') {
+    return safeWaterMemoryStore.slice(0, limit);
+  }
+  const database = getDb();
+  const rows = database.prepare(`
+    SELECT id, lat, lng, name, created_at FROM safe_water_reports ORDER BY created_at DESC LIMIT ?
+  `).all(limit) as SafeWaterReportRow[];
+  return rows;
 }

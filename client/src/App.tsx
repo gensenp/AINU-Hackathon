@@ -16,6 +16,12 @@ const redIcon = L.icon({
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
+const greenIcon = L.icon({
+  iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
 L.Marker.prototype.options.icon = defaultIcon;
 
 const DEFAULT_CENTER: [number, number] = [40.7128, -74.006];
@@ -72,6 +78,15 @@ function MapClickHandler({
   return null;
 }
 
+type UserSafeWaterReport = {
+  id: number;
+  lat: number;
+  lng: number;
+  name: string;
+  created_at: string;
+  distanceKm?: number;
+};
+
 type NearbyDisaster = { id: string; title?: string; state?: string; type?: string; count?: number };
 export default function App() {
   const [risk, setRisk] = useState<{
@@ -87,6 +102,18 @@ export default function App() {
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const [femaItems, setFemaItems] = useState<FemaItem[]>([]);
   const [reportSent, setReportSent] = useState<string | null>(null);
+  const [userSafeWater, setUserSafeWater] = useState<UserSafeWaterReport[]>([]);
+  const [reportSafeWaterSubmitting, setReportSafeWaterSubmitting] = useState(false);
+  const [reportSafeWaterDone, setReportSafeWaterDone] = useState(false);
+
+  const fetchUserSafeWater = (centerLat?: number, centerLng?: number) => {
+    const lat = centerLat ?? DEFAULT_CENTER[0];
+    const lng = centerLng ?? DEFAULT_CENTER[1];
+    fetch(`/api/safe-water?lat=${lat}&lng=${lng}&radius_km=80&limit=100`)
+      .then((r) => r.json())
+      .then((data: { reports: UserSafeWaterReport[] }) => setUserSafeWater(data.reports ?? []))
+      .catch(() => setUserSafeWater([]));
+  };
 
   useEffect(() => {
     fetch('/api/health')
@@ -105,6 +132,10 @@ export default function App() {
     load();
     const id = setInterval(load, 5 * 60 * 1000);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    fetchUserSafeWater();
   }, []);
 
   const handleLocationSelect = async (lat: number, lng: number) => {
@@ -157,6 +188,26 @@ export default function App() {
     if (lastClicked) fetchNearbySafeWater(lastClicked.lat, lastClicked.lng);
   };
 
+  const handleReportSafeWaterHere = async () => {
+    if (!lastClicked) return;
+    setReportSafeWaterSubmitting(true);
+    setReportSafeWaterDone(false);
+    try {
+      const res = await fetch('/api/safe-water', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: lastClicked.lat, lng: lastClicked.lng }),
+      });
+      if (res.ok) {
+        setReportSafeWaterDone(true);
+        fetchUserSafeWater(lastClicked.lat, lastClicked.lng);
+        setTimeout(() => setReportSafeWaterDone(false), 4000);
+      }
+    } finally {
+      setReportSafeWaterSubmitting(false);
+    }
+  };
+
   const handleReportProblem = async (p: SafeWaterPoint) => {
     const description = `Problem at water source: ${p.name} (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`;
     try {
@@ -194,6 +245,9 @@ export default function App() {
             </span>
             <span className="flex items-center gap-2">
               <span className="inline-block w-3 h-4 bg-red-500 rounded-sm" /> Disaster (FEMA)
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-3 h-4 bg-green-500 rounded-sm" /> User-reported safe water
             </span>
             <span className="flex items-center gap-2">
               <span className="inline-block w-3 h-3 rounded-full border-2 border-red-500 bg-red-500/10" /> 50 km approximate radius
@@ -243,6 +297,31 @@ export default function App() {
                 <Popup>You are here / Selected location</Popup>
               </Marker>
             )}
+
+            {userSafeWater.map((r) => (
+              <Marker key={`user-${r.id}`} position={[r.lat, r.lng]} icon={greenIcon}>
+                <Popup>
+                  <span className="font-medium">{r.name}</span>
+                  <br />
+                  <span className="text-gray-500 text-xs">Reported by community</span>
+                  {r.distanceKm != null && (
+                    <>
+                      <br />
+                      <span className="text-gray-500">{r.distanceKm} km from map center</span>
+                    </>
+                  )}
+                  <br />
+                  <a
+                    href={directionsUrl(r.lat, r.lng)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 text-sm hover:underline"
+                  >
+                    Get directions →
+                  </a>
+                </Popup>
+              </Marker>
+            ))}
 
             {safeWater?.map((p) => (
               <Marker key={p.id} position={[p.lat, p.lng]}>
@@ -297,16 +376,31 @@ export default function App() {
             </button>
 
             {lastClicked && (
-              <button
-                type="button"
-                onClick={handleFindSafeWaterFromPoint}
-                disabled={loadingSafeWater}
-                className="w-full mt-2 py-2 px-3 bg-emerald-100 hover:bg-emerald-200 disabled:opacity-50 text-emerald-800 font-medium rounded-lg text-sm"
-              >
-                From clicked point
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleFindSafeWaterFromPoint}
+                  disabled={loadingSafeWater}
+                  className="w-full mt-2 py-2 px-3 bg-emerald-100 hover:bg-emerald-200 disabled:opacity-50 text-emerald-800 font-medium rounded-lg text-sm"
+                >
+                  From clicked point
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReportSafeWaterHere}
+                  disabled={reportSafeWaterSubmitting}
+                  className="w-full mt-2 py-2 px-3 bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white font-medium rounded-lg text-sm"
+                >
+                  {reportSafeWaterSubmitting ? 'Sharing…' : reportSafeWaterDone ? '✓ Shared! Thanks' : 'Report safe water here'}
+                </button>
+              </>
             )}
           </div>
+          {userSafeWater.length > 0 && (
+            <p className="text-xs text-gray-500">
+              {userSafeWater.length} community-reported safe water location{userSafeWater.length !== 1 ? 's' : ''} on map.
+            </p>
+          )}
 
           {safeWaterError && <p className="text-sm text-red-600">{safeWaterError}</p>}
 
