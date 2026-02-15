@@ -73,11 +73,16 @@ function MapClickHandler({
 }
 
 type NearbyDisaster = { id: string; title?: string; state?: string; type?: string; count?: number };
+type ReservoirInfo = { reservoir: { name: string; state: string; serves?: string[] }; distanceKm: number };
+type FacilityAtRisk = { id: string; name: string; state: string; type: string; distanceKm: number };
 export default function App() {
   const [risk, setRisk] = useState<{
     score: number;
     explanation: string;
     nearbyDisasters: NearbyDisaster[];
+    reservoir: ReservoirInfo | null;
+    sourceReservoirInDisasterZone: boolean;
+    facilitiesAtRisk: FacilityAtRisk[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastClicked, setLastClicked] = useState<{ lat: number; lng: number } | null>(null);
@@ -120,6 +125,9 @@ export default function App() {
         score: data.score,
         explanation: data.explanation,
         nearbyDisasters: data.nearbyDisasters ?? [],
+        reservoir: data.reservoir ?? null,
+        sourceReservoirInDisasterZone: data.sourceReservoirInDisasterZone ?? false,
+        facilitiesAtRisk: data.facilitiesAtRisk ?? [],
       });
     } finally {
       setLoading(false);
@@ -313,20 +321,17 @@ export default function App() {
           {risk?.nearbyDisasters && risk.nearbyDisasters.length > 0 ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm">
               <h4 className="font-semibold text-red-900 mb-1">Disasters affecting this location</h4>
-              <p className="text-red-800 text-xs mb-2">
-                {risk.nearbyDisasters.reduce((s, d) => s + (d.count ?? 1), 0)} disaster declaration{risk.nearbyDisasters.reduce((s, d) => s + (d.count ?? 1), 0) !== 1 ? 's' : ''} within 50 km.
+              <p className="text-red-800 text-xs mb-1">
+                <strong>Disasters nearby selected location:</strong>{' '}
+                {risk.nearbyDisasters.map((d) => {
+                  const name = (d.title ?? 'Disaster declaration').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+                  const n = d.count ?? 1;
+                  return `${name} (${n} declaration${n !== 1 ? 's' : ''})`;
+                }).join(', ')}.
+              </p>
+              <p className="text-red-800 text-xs">
                 Disasters can affect water supply and quality. Check local and FEMA advisories before using local water.
               </p>
-              <ul className="list-disc list-inside text-red-800 text-xs space-y-0.5">
-                {risk.nearbyDisasters.map((d, i) => (
-                  <li key={d.id ?? i}>
-                    {d.title ?? 'Disaster declaration'}
-                    {d.state && ` (${d.state})`}
-                    {d.type && ` — ${d.type}`}
-                    {(d.count ?? 1) > 1 && ` (${d.count} declarations)`}
-                  </li>
-                ))}
-              </ul>
             </div>
           ) : risk && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm">
@@ -402,8 +407,31 @@ export default function App() {
           {risk && (
             <div>
               <p className="text-2xl font-semibold text-gray-800">
-                Score: <span className="text-blue-600">{risk.score}</span>/100
+                Water safety risk: <span className="text-blue-600">{risk.score}</span>/100
               </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Based on disasters, water source (reservoir), and hazardous facilities within range. Higher = lower risk.
+              </p>
+              {risk.reservoir && (
+                <p className="mt-2 text-sm text-gray-700">
+                  <strong>Water source:</strong> {risk.reservoir.reservoir.name}
+                  {risk.reservoir.reservoir.serves && risk.reservoir.reservoir.serves.length > 0 && (
+                    <span className="text-gray-500 text-xs"> (serves {risk.reservoir.reservoir.serves.join(', ')})</span>
+                  )}
+                  <span className="text-gray-500 text-xs"> — {Math.round(risk.reservoir.distanceKm)} km away</span>
+                </p>
+              )}
+              {!risk.reservoir && (
+                <p className="mt-2 text-sm text-gray-500">Water source: Unknown (no reservoir within 250 km in our data).</p>
+              )}
+              {risk.sourceReservoirInDisasterZone && (
+                <p className="mt-1 text-sm text-amber-700 font-medium">Your water source is in a disaster zone.</p>
+              )}
+              {risk.facilitiesAtRisk.length > 0 && (
+                <p className="mt-1 text-sm text-amber-700">
+                  Disaster near hazardous facility: {risk.facilitiesAtRisk.map((f) => `${f.name} (${f.type.replace('_', ' ')})`).join(', ')}.
+                </p>
+              )}
               <p className="mt-2 text-sm text-gray-600">{risk.explanation}</p>
             </div>
           )}
@@ -413,7 +441,7 @@ export default function App() {
           )}
 
           <p className="text-xs text-gray-400 mt-2">
-            Data: OpenStreetMap (water), FEMA (disasters). Disaster radius is approximate; FEMA designates affected areas by county. See FEMA.gov for official boundaries. Not a substitute for official advisories.
+            Data: OpenStreetMap (water), FEMA (disasters), demo reservoir &amp; facility locations. Disaster radius is approximate. See FEMA.gov for official boundaries. Not a substitute for official advisories.
           </p>
         </aside>
       </div>

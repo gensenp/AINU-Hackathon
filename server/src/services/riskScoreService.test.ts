@@ -9,9 +9,9 @@ function assert(condition: boolean, message: string) {
   if (!condition) throw new Error(message);
 }
 
-// Helper: disaster at lat/lng (within 50 km will lower score)
-const disaster = (lat: number, lng: number, title?: string): Disaster => ({
-  id: '1',
+// Helper: disaster at lat/lng (within 50 km will lower score). Use distinct id for distinct penalty.
+const disaster = (lat: number, lng: number, title?: string, id: string = '1'): Disaster => ({
+  id,
   lat,
   lng,
   title: title ?? 'Test disaster',
@@ -48,15 +48,15 @@ assert(
 );
 console.log('✓ One disaster within 50 km → score 75');
 
-// 4. Two disasters within 50 km → score drops further
-const nearby2 = disaster(40.5, -73.8, 'Chemical spill');
+// 4. Two disasters within 50 km → score drops further (distinct ids = distinct events)
+const nearby2 = disaster(40.5, -73.8, 'Chemical spill', '2');
 const twoResult = computeRiskScore(nyc.lat, nyc.lng, [nearby, nearby2]);
 assert(twoResult.score === 50, `Expected 50, got ${twoResult.score}`);
 assert(twoResult.nearbyDisasters.length === 2, 'Two nearby in list');
 console.log('✓ Two disasters nearby → score 50');
 
-// 5. Score never goes below 0
-const many = Array.from({ length: 10 }, (_, i) => disaster(40.7 + i * 0.01, -74, `D${i}`));
+// 5. Score never goes below 0 (each has distinct id so each counts)
+const many = Array.from({ length: 10 }, (_, i) => disaster(40.7 + i * 0.01, -74, `D${i}`, `id-${i}`));
 const manyResult = computeRiskScore(nyc.lat, nyc.lng, many);
 assert(manyResult.score >= 0, `Score should be >= 0, got ${manyResult.score}`);
 assert(manyResult.nearbyDisasters.length === 10, 'All 10 in nearby list');

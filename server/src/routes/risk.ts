@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { getDisasters } from '../services/disasters.js';
 import { getAiExplanation } from '../services/aiExplanation.js';
 import { computeRiskScore } from '../services/riskScoreService.js';
+import { getReservoirForPoint } from '../services/reservoirs.js';
+import { getFacilitiesNearPoint } from '../services/facilities.js';
 
 export const riskRouter = Router();
 
@@ -14,16 +16,29 @@ riskRouter.get('/', async (req, res) => {
     return res.status(400).json({ error: 'lat and lng required' });
   }
 
-  const disasters = await getDisasters();
-  const { score, explanation: heuristicExplanation, nearbyDisasters } = computeRiskScore(
-    lat,
-    lng,
-    disasters
-  );
+  const [disasters, reservoir, facilitiesNearby] = await Promise.all([
+    getDisasters(),
+    Promise.resolve(getReservoirForPoint(lat, lng)),
+    Promise.resolve(getFacilitiesNearPoint(lat, lng, 120)),
+  ]);
 
-  let explanation = heuristicExplanation;
-  const aiSentence = await getAiExplanation(score, heuristicExplanation, lat, lng);
+  const result = computeRiskScore(lat, lng, disasters, {
+    reservoir: reservoir ?? null,
+    facilitiesNearby,
+  });
+
+  let explanation = result.explanation;
+  const aiSentence = await getAiExplanation(result.score, result.explanation, lat, lng);
   if (aiSentence) explanation = aiSentence;
 
-  res.json({ score, explanation, nearbyDisasters, lat, lng });
+  res.json({
+    score: result.score,
+    explanation,
+    nearbyDisasters: result.nearbyDisasters,
+    reservoir: result.reservoir,
+    sourceReservoirInDisasterZone: result.sourceReservoirInDisasterZone,
+    facilitiesAtRisk: result.facilitiesAtRisk,
+    lat,
+    lng,
+  });
 });

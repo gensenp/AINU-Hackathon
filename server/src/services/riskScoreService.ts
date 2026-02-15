@@ -1,4 +1,12 @@
+/**
+ * Water-safety risk score (0–100). Factors:
+ * - Disasters near the selected point (FEMA)
+ * - Disaster near the area's water source reservoir → source at risk
+ * - Disaster near hazardous facilities (power, nuclear, refinery) → higher susceptibility
+ */
 import type { Disaster } from './disasters.js';
+import type { ReservoirForPoint } from './reservoirs.js';
+import type { FacilityNearby } from './facilities.js';
 
 /** Rough distance in km between two points (Haversine). */
 function distanceKm(
@@ -21,9 +29,17 @@ function distanceKm(
 }
 
 // Conservative "potential impact" zone; FEMA designates by county—no official radius.
-// 50 km is illustrative for water-safety awareness. See FEMA.gov for official designated areas.
 const DISASTER_RADIUS_KM = 50;
 const PENALTY_PER_DISASTER = 25;
+const PENALTY_SOURCE_RESERVOIR_IN_ZONE = 15;
+const PENALTY_PER_FACILITY_AT_RISK = 10;
+const MAX_FACILITY_PENALTY = 20; // cap at 2 facilities
+
+/** One penalty per distinct disaster (FEMA disasterNumber + state), not per declaration row. */
+function disasterEventKey(d: Disaster): string {
+  if (d.disasterNumber != null && d.state != null) return `${d.disasterNumber}-${d.state}`;
+  return d.id;
+}
 
 /** Unique disaster with declaration count for display (avoids repeating the same event 20+ times). */
 export type NearbyDisasterSummary = {
@@ -34,44 +50,86 @@ export type NearbyDisasterSummary = {
   count: number;
 };
 
+/** Facility that has a disaster within DISASTER_RADIUS_KM (for display). */
+export type FacilityAtRisk = FacilityNearby;
+
 export type RiskResult = {
   score: number;
   explanation: string;
   nearbyDisasters: NearbyDisasterSummary[];
+  /** Nearest reservoir that could supply this area (if within 250 km). */
+  reservoir: ReservoirForPoint | null;
+  /** True if any disaster is within 50 km of that reservoir. */
+  sourceReservoirInDisasterZone: boolean;
+  /** Facilities (power, nuclear, refinery) that have a disaster within 50 km. */
+  facilitiesAtRisk: FacilityAtRisk[];
 };
 
 function key(d: Disaster): string {
   return [d.title ?? '', d.state ?? '', d.type ?? ''].join('|');
 }
 
+export type RiskScoreOptions = {
+  reservoir?: ReservoirForPoint | null;
+  facilitiesNearby?: FacilityNearby[];
+};
+
 /**
- * Heuristic risk score from 0–100. Uses disaster data from Step 1 (or empty list).
- * Returns disasters within DISASTER_RADIUS_KM, deduplicated by title+state+type with count.
+ * Heuristic risk score from 0–100. Factors: disasters near point, disaster near source reservoir, disaster near facilities.
  */
 export function computeRiskScore(
   lat: number,
   lng: number,
-  disasters: Disaster[]
+  disasters: Disaster[],
+  options: RiskScoreOptions = {}
 ): RiskResult {
+  const { reservoir = null, facilitiesNearby = [] } = options;
   let score = 100;
   const nearbyRaw: Disaster[] = [];
+  const seenEvents = new Set<string>();
 
   for (const d of disasters) {
     if (d.lat != null && d.lng != null) {
       const km = distanceKm(lat, lng, d.lat, d.lng);
       if (km <= DISASTER_RADIUS_KM) {
-        score -= PENALTY_PER_DISASTER;
         nearbyRaw.push(d);
+        const eventKey = disasterEventKey(d);
+        if (!seenEvents.has(eventKey)) {
+          seenEvents.add(eventKey);
+          score -= PENALTY_PER_DISASTER;
+        }
       }
-    } else if (d.state) {
-      // No coords: we could resolve state → lat/lng and check, or treat as "in state" = penalty
-      // For MVP, skip state-only checks unless you add a state-to-center lookup
     }
   }
 
+  // Disaster within 50 km of the area's source reservoir?
+  let sourceReservoirInDisasterZone = false;
+  if (reservoir) {
+    for (const d of disasters) {
+      if (d.lat != null && d.lng != null && distanceKm(reservoir.reservoir.lat, reservoir.reservoir.lng, d.lat, d.lng) <= DISASTER_RADIUS_KM) {
+        sourceReservoirInDisasterZone = true;
+        break;
+      }
+    }
+    if (sourceReservoirInDisasterZone) score -= PENALTY_SOURCE_RESERVOIR_IN_ZONE;
+  }
+
+  // Facilities that have a disaster within 50 km
+  const facilitiesAtRisk: FacilityAtRisk[] = [];
+  for (const f of facilitiesNearby) {
+    for (const d of disasters) {
+      if (d.lat != null && d.lng != null && distanceKm(f.lat, f.lng, d.lat, d.lng) <= DISASTER_RADIUS_KM) {
+        facilitiesAtRisk.push(f);
+        break;
+      }
+    }
+  }
+  const facilityPenalty = Math.min(MAX_FACILITY_PENALTY, facilitiesAtRisk.length * PENALTY_PER_FACILITY_AT_RISK);
+  score -= facilityPenalty;
+
   score = Math.max(0, Math.min(100, score));
 
-  // Deduplicate by title+state+type for display; keep count
+  // Deduplicate disasters by title+state+type for display
   const byKey = new Map<string, { d: Disaster; count: number }>();
   for (const d of nearbyRaw) {
     const k = key(d);
@@ -80,23 +138,33 @@ export function computeRiskScore(
     else byKey.set(k, { d, count: 1 });
   }
   const nearbyDisasters: NearbyDisasterSummary[] = Array.from(byKey.values()).map(
-    ({ d, count }) => ({
-      id: d.id,
-      title: d.title,
-      state: d.state,
-      type: d.type,
-      count,
-    })
+    ({ d, count }) => ({ id: d.id, title: d.title, state: d.state, type: d.type, count })
   );
 
   const reasonParts = Array.from(byKey.values()).map(({ d, count }) => {
     const label = d.title ? `${d.title}${d.state ? ` (${d.state})` : ''}` : 'Active disaster declaration within 50 km';
     return count > 1 ? `${label} (${count} declarations)` : label;
   });
+  const parts: string[] = [];
+  if (reasonParts.length > 0) parts.push(`Disaster nearby: ${reasonParts.join('. ')}.`);
+  if (sourceReservoirInDisasterZone && reservoir) {
+    parts.push(`Your water source (${reservoir.reservoir.name}) is in a disaster zone.`);
+  }
+  if (facilitiesAtRisk.length > 0) {
+    const names = facilitiesAtRisk.map((f) => `${f.name} (${f.type.replace('_', ' ')})`).join(', ');
+    parts.push(`Disaster near hazardous facility: ${names}.`);
+  }
   const explanation =
-    reasonParts.length > 0
-      ? `Disaster nearby: ${reasonParts.join('. ')}.`
-      : 'No known disasters or water issues in this area. Consider checking local utility reports.';
+    parts.length > 0
+    ? parts.join(' ')
+    : 'No known disasters or water issues in this area. Consider checking local utility reports.';
 
-  return { score, explanation, nearbyDisasters };
+  return {
+    score,
+    explanation,
+    nearbyDisasters,
+    reservoir: reservoir ?? null,
+    sourceReservoirInDisasterZone,
+    facilitiesAtRisk,
+  };
 }
