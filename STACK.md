@@ -40,6 +40,7 @@ Two concrete places where AI shows up:
 
 - **Inputs:** Location (lat/lng) + optional: in flood zone? nearby industrial/ECHO facilities? active FEMA declaration? recent user reports?
 - **Output:** Safety score (e.g. 0–100) + short explanation.
+- **Current formula (heuristic):** `score = 100 − (25 × distinct disasters within 50 km)`, clamped to 0–100. "Distinct" = one per FEMA disaster event (disasterNumber + state), not per declaration row. See `server/src/services/riskScoreService.ts`.
 - **MVP options:**
   - **Heuristic model:** Rules in code (e.g. “in flood zone + disaster declaration ⇒ score −30”). Fast, explainable, no API cost.
   - **LLM assist:** Send same inputs to OpenAI/Anthropic and ask for a score + one-sentence explanation. Good for pitch and “AI-powered” narrative; hide key in env.

@@ -28,6 +28,7 @@ const STATE_CENTROIDS: Record<string, { lat: number; lng: number }> = {
 
 export type FemaDisaster = {
   id: string;
+  disasterNumber: string;
   title: string;
   state: string;
   lat: number;
@@ -38,6 +39,7 @@ export type FemaDisaster = {
 
 type FemaRow = {
   id: string;
+  disasterNumber: string | number;
   state: string;
   declarationTitle: string;
   incidentType: string;
@@ -60,6 +62,7 @@ export async function getFemaDisasters(limit: number = 50): Promise<FemaDisaster
     const centroid = STATE_CENTROIDS[row.state] ?? { lat: 39.5, lng: -98.0 };
     return {
       id: row.id,
+      disasterNumber: String(row.disasterNumber ?? row.id),
       title: row.declarationTitle ?? 'Disaster declaration',
       state: row.state,
       lat: centroid.lat,

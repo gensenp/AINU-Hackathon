@@ -6,6 +6,7 @@ import { getFemaDisasters } from './fema.js';
 
 export type Disaster = {
   id: string;
+  disasterNumber?: string;
   title?: string;
   state?: string;
   lat?: number;
@@ -19,6 +20,7 @@ export async function getDisasters(): Promise<Disaster[]> {
     const items = await getFemaDisasters(100);
     return items.map((d) => ({
       id: d.id,
+      disasterNumber: d.disasterNumber,
       title: d.title,
       state: d.state,
       lat: d.lat,
