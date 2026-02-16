@@ -8,10 +8,14 @@ export async function getAiExplanation(
   lat: number,
   lng: number
 ): Promise<string | null> {
-  const key = process.env.OPENAI_API_KEY;
-  if (!key?.trim()) return null;
+  const key = process.env.OPENAI_API_KEY?.trim();
+  if (!key) {
+    console.log('[AI] No OPENAI_API_KEY in env — skipping AI explanation');
+    return null;
+  }
 
   try {
+    console.log('[AI] Calling OpenAI...');
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -36,11 +40,18 @@ Reply with only that one sentence, no quotes or preamble.`,
       }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const errBody = await res.text();
+      console.error('[AI] OpenAI error', res.status, errBody.slice(0, 200));
+      return null;
+    }
     const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
     const text = data.choices?.[0]?.message?.content?.trim();
+    if (text) console.log('[AI] Got response:', text.slice(0, 80) + (text.length > 80 ? '...' : ''));
+    else console.warn('[AI] Empty content in OpenAI response');
     return text || null;
-  } catch {
+  } catch (e) {
+    console.error('[AI] Request failed:', e instanceof Error ? e.message : e);
     return null;
   }
 }

@@ -28,13 +28,12 @@ riskRouter.get('/', async (req, res) => {
     facilitiesNearby,
   });
 
-  let explanation = result.explanation;
-  const aiSentence = await getAiExplanation(result.score, result.explanation, lat, lng);
-  if (aiSentence) explanation = aiSentence;
+  const explanationFromAi = await getAiExplanation(result.score, result.explanation, lat, lng);
 
   res.json({
     score: result.score,
-    explanation,
+    explanation: result.explanation,
+    explanationFromAi: explanationFromAi ?? null,
     nearbyDisasters: result.nearbyDisasters,
     reservoir: result.reservoir,
     sourceReservoirInDisasterZone: result.sourceReservoirInDisasterZone,

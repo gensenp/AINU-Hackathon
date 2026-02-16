@@ -94,6 +94,7 @@ export default function App() {
   const [risk, setRisk] = useState<{
     score: number;
     explanation: string;
+    explanationFromAi: string | null;
     nearbyDisasters: NearbyDisaster[];
     reservoir: ReservoirInfo | null;
     sourceReservoirInDisasterZone: boolean;
@@ -155,6 +156,7 @@ export default function App() {
       if (res.ok) setRisk({
         score: data.score,
         explanation: data.explanation,
+        explanationFromAi: data.explanationFromAi ?? null,
         nearbyDisasters: data.nearbyDisasters ?? [],
         reservoir: data.reservoir ?? null,
         sourceReservoirInDisasterZone: data.sourceReservoirInDisasterZone ?? false,
@@ -527,6 +529,16 @@ export default function App() {
                 </p>
               )}
               <p className="mt-2 text-sm text-gray-600">{risk.explanation}</p>
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">AI risk evaluation</p>
+                {risk.explanationFromAi ? (
+                  <p className="mt-1 text-sm text-gray-800">{risk.explanationFromAi}</p>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-500 italic">
+                    AI evaluation is off. Set <code className="text-xs bg-gray-100 px-1 rounded">OPENAI_API_KEY</code> in <code className="text-xs bg-gray-100 px-1 rounded">server/.env</code> and restart the server to see an AI evaluation.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
